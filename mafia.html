@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Word Game - Pass n Play</title>
+<link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Roboto+Slab&display=swap" rel="stylesheet">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');
+
+body {
+  font-family: 'Luckiest Guy', cursive;
+  margin:0; padding:0;
+  display:flex; justify-content:center; align-items:center;
+  min-height:100vh;
+  background: url('https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQJqIZ9Q_OM2TUdITGNlyPTjWkqGsmDvPWt_MVvifnhlwZ_ay-SRU-Fut0&s=10') no-repeat center center fixed;
+  background-size: cover;
+  color:#fff;
+  text-shadow: 2px 2px 5px rgba(0,0,0,0.7);
+}
+
+#game {
+  background: rgba(0,0,0,0.65); 
+  padding:25px; 
+  border-radius:20px; 
+  width:95%; 
+  max-width:600px;
+  box-shadow:0 8px 30px rgba(0,0,0,0.4); 
+  text-align:center;
+}
+
+h2 {
+  margin-top:0; 
+  font-size:2.2em; 
+  font-family:'Fredoka One', cursive;
+  color: #FFD700; /* bright yellow */
+  text-shadow: 3px 3px 8px rgba(0,0,0,0.8);
+}
+
+button:hover { transform:scale(1.05); box-shadow:0 4px 15px rgba(0,0,0,0.3);}
+input, select { width:100%; padding:10px; margin:5px 0 15px 0; border-radius:8px; border:none; font-weight:bold;}
+#playerName { color:#000; background:none; /* solid black for input */ }
+.word-box {
+  background: linear-gradient(135deg, #f6d365, #fda085);
+  color:#333; font-size:32px; font-weight:bold; padding:25px; margin:20px 0; border-radius:15px;
+  box-shadow:0 4px 20px rgba(0,0,0,0.5);
+  transition: transform 0.3s, opacity 0.3s;
+}
+#playerList li { margin:5px 0; font-weight:bold; color:#fff; /* solid white */ }
+.hidden { display:none; }
+#startBtn { padding:15px 25px; font-size:22px; margin-bottom:20px; background: linear-gradient(45deg,#ff9a9e,#fad0c4); color:#fff; font-weight:bold;}
+</style>
+</head>
+<body>
+<div id="game">
+  <audio id="bgMusic" loop>
+    <source src="https://audio.jukehost.co.uk/HMigdQcsBfq7VrnERLCLAxg57xXq0Css" type="audio/mpeg">
+  </audio>
+
+  <!-- Mobile-friendly Start Button -->
+  <div id="startScreen">
+    <h2>MAFIA - UNDERWORLD.KING</h2>
+    <button id="startBtn">Tap to Start Game & Music</button>
+  </div>
+
+  <div id="lobby" class="hidden">
+    <input type="text" id="playerName" placeholder="Enter player name">
+    <button id="addPlayerBtn">Add Player</button>
+    <ul id="playerList"></ul>
+
+    <div>
+      <label>Imposter count:</label>
+      <input type="number" id="imposterCount" min="1" value="1">
+    </div>
+
+    <div>
+      <label>Select word pack:</label>
+      <select id="packSelect">
+        <option value="Food">Food</option>
+        <option value="Places">Places</option>
+        <option value="Objects">Furniture / Objects</option>
+        <option value="Sports">Sports</option>
+        <option value="Celebrities">Celebrities</option>
+        <option value="Fictional">Fictional Characters</option>
+      </select>
+    </div>
+
+    <button id="startGameBtn">Start Game</button>
+  </div>
+
+  <div id="assignPhase" class="hidden">
+    <h2>Player <span id="currentPlayerName"></span></h2>
+    <p>Click the button to reveal your word</p>
+    <button id="revealWordBtn">Reveal Word</button>
+    <div class="word-box hidden" id="wordBox"></div>
+    <button id="nextPlayerBtn" class="hidden">Next Player</button>
+  </div>
+
+  <div id="resultsPhase" class="hidden">
+    <h2>Round Results</h2>
+    <ul id="resultsList"></ul>
+    <button id="revealAllBtn">Reveal All</button>
+    <button id="restartBtn">Play Again</button>
+  </div>
+</div>
+
+<script>
+// Music autoplay only on button click
+const bgMusic = document.getElementById("bgMusic");
+document.getElementById("startBtn").onclick = () => {
+  bgMusic.play().catch(e=>console.log("Music blocked"));
+  document.getElementById("startScreen").classList.add("hidden");
+  document.getElementById("lobby").classList.remove("hidden");
+};
+
+// Game Logic
+const packs = {
+  Food:[["Pizza","Burger"],["Coffee","Tea"],["Pasta","Noodles"],["Cake","Pie"],["Ice cream","Frozen yogurt"],["Sandwich","Wrap"],["Sushi","Sashimi"],["Fried rice","Biryani"],["Curry","Stew"],["Mango","Papaya"],["Fuchka","Jhalmuri"],["Panta Bhat","Bhuna Khichuri"],["Rosogolla","Chamcham"],["Kacchi Biryani","Morog Polao"],["Shutki","Hilsa Fish"],["Singara","Chotpoti"],["Mishti Doi","Rasgulla"],["Chicken Curry","Beef Bhuna"],["Vegetable Pulao","Khichuri"],["Bhapa Ilish","Fried Prawn"]],
+  Places:[["Library","Bookstore"],["Beach","Mountains"],["Museum","Amusement Park"],["Airport","Train Station"],["Restaurant","Café"],["Park","Garden"],["Stadium","Arena"],["Desert","Rainforest"],["Hotel","Resort"],["Village","City"],["Sundarbans","Cox's Bazar"],["Lalbagh Fort","Ahsan Manzil"],["Sonargaon","Paharpur"],["Kuakata","Jaflong"],["Bandarban","Rangamati"],["Sylhet Tea Gardens","Ratargul Swamp Forest"],["Mahasthangarh","Paharpur ruins"],["Dhaka University","Jagannath University"],["Bagerhat","Shat Gambuj Masjid"],["Rupsha Bridge","Padma Bridge"]],
+  Objects:[["Chair","Sofa"],["Bed","Table"],["Lamp","Mirror"],["Laptop","Tablet"],["Spoon","Fork"],["Backpack","Suitcase"],["Headphones","Earbuds"],["Shelf","Cabinet"],["Door","Window"],["Curtain","Carpet"]],
+  Sports:[["Cricket","Chess"],["Football","Swimming"],["Tennis","Archery"],["Basketball","Gymnastics"],["Hockey","Boxing"],["Diving","Cycling"],["Cycling","Yoga"],["Boxing","Weightlifting"],["Table Tennis","Air Hockey"],["Badminton","Fencing"],["Shakib Al Hasan","Tamim Iqbal"],["Mashrafe Mortaza","Mushfiqur Rahim"],["Litton Das","Mustafizur Rahman"],["Mehedi Hasan Miraz","Mahmudullah"],["Jahanara Alam","Salma Khatun"]],
+  Celebrities:[["Dhanush","Vijay"],["Mithun Chakraborty","Ritwick Chakraborty"],["Shakib Khan","Shakib Al Hasan"],["SRK","Salman Khan"],["Jaya Ahsan","Nusrat Imrose Tisha"],["Deepika Padukone","Kajal Aggarwal"],["Priyanka Chopra","Thalapathi"],["Leonardo DiCaprio","Chris Hemsworth"],["Scarlett Johansson","Robert Downey Jr."],["Allu Arjun","NTR"],["Mahesh Babu","Rashmika Mandanna"],["Tiger Shroff","Hrithik Roshan"],["Alia Bhatt","Ranbir Kapoor"],["Anya Taylor-Joy","Emma Watson"],["Zendaya","Tom Holland"],["Benedict Cumberbatch","Chris Evans"],["Gal Gadot","Henry Cavill"],["Imran Hashmi","Chanchal Choudhuri"],["Pori Moni","Opu Bishwas"]],
+  Fictional:[["Harry Potter","Iron Man"],["Hermione Granger","Batman"],["Batman","Gandalf"],["Iron Man","Captain America"],["Superman","Lex Luthor"],["Spiderman","Green Goblin"],["Frodo Baggins","Naruto"],["Katniss Everdeen","Peeta Mellark"],["Elsa","Anna"],["Naruto","Sasuke"],["Thor","Loki"],["Hulk","Black Widow"],["Wonder Woman","Aquaman"],["Doctor Strange","Wanda Maximoff"],["Dumbledore","Voldemort"],["Joker","Harley Quinn"],["Link","Zelda"],["Mario","Luigi"],["Sonic","Tails"]]
+};
+
+let players=[]; let history=[]; const HISTORY_LIMIT=15;
+let assignments=[]; let currentPlayerIndex=0;
+
+function updatePlayerList() {
+  const ul = document.getElementById("playerList"); ul.innerHTML="";
+  players.forEach(p=>{ const li=document.createElement("li"); li.textContent=p; ul.appendChild(li); });
+}
+
+document.getElementById("addPlayerBtn").onclick = () => {
+  const name=document.getElementById("playerName").value.trim();
+  if(name && !players.includes(name)) { players.push(name); updatePlayerList(); document.getElementById("playerName").value=""; }
+};
+
+document.getElementById("startGameBtn").onclick = () => {
+  const imposterCount=parseInt(document.getElementById("imposterCount").value)||1;
+  if(players.length<3){alert("Need at least 3 players"); return;}
+  if(imposterCount>=players.length){alert("Too many imposters"); return;}
+  const pack=document.getElementById("packSelect").value;
+  startAssignment(pack,imposterCount);
+};
+
+function pickRandomPair(pairList) {
+  let pair, attempts=0;
+  do { pair = pairList[Math.floor(Math.random()*pairList.length)]; attempts++; }
+  while(history.includes(pair.join("|")) && attempts<50);
+  history.push(pair.join("|"));
+  if(history.length>HISTORY_LIMIT) history.shift();
+  return pair;
+}
+
+function startAssignment(packName, imposterCount){
+  const pairList = packs[packName];
+  const pair = pickRandomPair(pairList);
+  const imposterIndexes=[];
+  while(imposterIndexes.length<imposterCount){
+    const idx=Math.floor(Math.random()*players.length);
+    if(!imposterIndexes.includes(idx)) imposterIndexes.push(idx);
+  }
+  assignments = players.map((name,i)=>({name,isImposter:imposterIndexes.includes(i),word:i===imposterIndexes[0]?pair[1]:pair[0]}));
+  currentPlayerIndex=0;
+  document.getElementById("lobby").classList.add("hidden");
+  showAssignPhase();
+}
+
+function showAssignPhase(){
+  const player=assignments[currentPlayerIndex];
+  document.getElementById("assignPhase").classList.remove("hidden");
+  document.getElementById("currentPlayerName").textContent=player.name;
+  const wordBox=document.getElementById("wordBox");
+  wordBox.classList.add("hidden");
+  wordBox.style.transform="scale(0.8)";
+  document.getElementById("nextPlayerBtn").classList.add("hidden");
+}
+
+document.getElementById("revealWordBtn").onclick = () => {
+  const player = assignments[currentPlayerIndex];
+  const wordBox=document.getElementById("wordBox");
+  wordBox.textContent = player.word;
+  wordBox.classList.remove("hidden");
+  wordBox.style.transform="scale(1.1)";
+  document.getElementById("nextPlayerBtn").classList.remove("hidden");
+};
+
+document.getElementById("nextPlayerBtn").onclick = () => {
+  currentPlayerIndex++;
+  if(currentPlayerIndex>=assignments.length){ showResults(); }
+  else{ showAssignPhase(); }
+};
+
+function showResults(){
+  document.getElementById("assignPhase").classList.add("hidden");
+  document.getElementById("resultsPhase").classList.remove("hidden");
+  const ul=document.getElementById("resultsList"); ul.innerHTML="";
+  assignments.forEach(p=>{
+    const li=document.createElement("li");
+    li.textContent=${p.name} - ???;
+    ul.appendChild(li);
+  });
+}
+
+document.getElementById("revealAllBtn").onclick = () => {
+  const ul=document.getElementById("resultsList"); ul.innerHTML="";
+  assignments.forEach(p=>{
+    const li=document.createElement("li");
+    li.textContent=${p.name} - ${p.word} ${p.isImposter?"(Imposter)":""};
+    ul.appendChild(li);
+  });
+};
+
+document.getElementById("restartBtn").onclick = () => {
+  assignments=[]; currentPlayerIndex=0;
+  document.getElementById("assignPhase").classList.add("hidden");
+  document.getElementById("resultsPhase").classList.add("hidden");
+  document.getElementById("lobby").classList.remove("hidden");
+};
+</script>
+</body>
+</html>
