@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>word game - pass n play</title>
+<link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&display=swap" rel="stylesheet">
+<style>
+body {
+  font-family: 'Luckiest Guy', cursive;
+  margin:0; padding:0;
+  display:flex; justify-content:center; align-items:center;
+  min-height:100vh;
+  background: url('https://cdn.pixabay.com/photo/2016/09/21/00/44/mystery-island-1599527_1280.jpg') no-repeat center center fixed;
+  background-size: cover;
+  color:#fff;
+  text-shadow: 2px 2px 5px rgba(0,0,0,0.7);
+}
+#game {
+  background: rgba(0,0,0,0.6); padding:25px; border-radius:20px; width:95%; max-width:600px;
+  box-shadow:0 8px 30px rgba(0,0,0,0.4); text-align:center;
+}
+h2 { margin-top:0; font-size:2em; }
+button {
+  padding:12px 25px; margin:5px; font-size:18px;
+  border:none; border-radius:12px; cursor:pointer;
+  transition: transform 0.1s, box-shadow 0.2s;
+  background: linear-gradient(45deg,#ff6ec4,#7873f5);
+  color:#fff; font-weight:bold;
+  text-shadow: 1px 1px 3px #000;
+}
+button:hover { transform:scale(1.05); box-shadow:0 4px 15px rgba(0,0,0,0.3);}
+input, select { width:100%; padding:10px; margin:5px 0 15px 0; border-radius:8px; border:none; }
+.word-box {
+  background: linear-gradient(135deg, #f6d365, #fda085);
+  color:#333; font-size:32px; font-weight:bold; padding:28px; margin:20px 0; border-radius:15px;
+  box-shadow:0 4px 20px rgba(0,0,0,0.5);
+  transition: transform 0.3s, opacity 0.3s;
+  letter-spacing: 1px; /* small spacing so letters don’t stick */
+}
+#playerList li { margin:5px 0; }
+.hidden { display:none; }
+
+/* small label above the word */
+#categoryLabel { font-size:16px; opacity:0.95; margin-top:4px; }
+.helper { font-size:12px; opacity:0.9; margin-top:-8px; margin-bottom:10px; }
+.divider { height:1px; background:rgba(255,255,255,0.2); margin:12px 0; border-radius:999px; }
+</style>
+</head>
+<body>
+<div id="game">
+  <audio id="bgMusic" loop>
+    <source src="https://audio.jukehost.co.uk/HMigdQcsBfq7VrnERLCLAxg57xXq0Css" type="audio/mpeg">
+  </audio>
+
+  <!-- TITLE (rainbow kept) -->
+  <h2 id="gameTitle">MAFIA - UNDERWORLD.KING</h2>
+
+  <!-- LOBBY (kept visually similar; added Seed/N/Seat/Round) -->
+  <div id="lobby">
+    <!-- Keep your original name/add list UI to preserve look (not required for seeded play) -->
+    <input type="text" id="playerName" placeholder="Enter player name">
+    <button id="addPlayerBtn">Add Player</button>
+    <ul id="playerList"></ul>
+
+    <div class="divider"></div>
+
+    <!-- Imposter count exists in your design; seeded game always uses exactly 1 -->
+    <div>
+      <label>Imposter count:</label>
+      <input type="number" id="imposterCount" min="1" value="1" readonly>
+      <div class="helper">Seeded mode always has exactly one imposter</div>
+    </div>
+
+    <div>
+      <label>Select word pack (used for Round 1):</label>
+      <select id="packSelect">
+        <option value="Food">Food</option>
+        <option value="Places">Places</option>
+        <option value="Objects">Furniture / Objects</option>
+        <option value="Sports">Sports</option>
+        <option value="Celebrities">Celebrities</option>
+        <option value="Fictional">Fictional Characters</option>
+      </select>
+      <div class="helper">From Round 2, the game auto-picks a different category</div>
+    </div>
+
+    <!-- NEW: Seeded multiplayer settings -->
+    <div>
+      <label>Seed (everyone must match exactly):</label>
+      <input type="text" id="seedInput" placeholder="e.g. FridayNight123">
+    </div>
+    <div>
+      <label>Players (N):</label>
+      <input type="number" id="totalPlayers" min="3" value="4">
+    </div>
+    <div>
+      <label>Your Seat (1..N):</label>
+      <input type="number" id="yourSeat" min="1" value="1">
+    </div>
+
+    <button id="startGameBtn">Start Game</button>
+  </div>
+
+  <!-- WORD SCREEN -->
+  <div id="playPhase" class="hidden">
+    <div id="categoryLabel">Category: —</div>
+    <div class="word-box" id="wordBox"></div>
+    <button id="replayBtn">Replay (Next Round)</button>
+    <button id="changeSettingsBtn">Change Settings</button>
+    <div class="helper">Keep the same seed/settings on all devices for synced rounds</div>
+  </div>
+
+  <!-- (Your old assign/results kept out of the way to preserve structure, not used) -->
+  <div id="assignPhase" class="hidden"></div>
+  <div id="resultsPhase" class="hidden"></div>
+</div>
+
+<script>
+/* ===== Rainbow Title (kept) ===== */
+const title = document.getElementById("gameTitle");
+const colors = ["#FF3CAC","#784BA0","#2B86C5","#F9D423","#FF6B6B","#FFD93D","#6A0572","#FFB347"];
+title.innerHTML = title.textContent.split("").map((letter, i) =>
+  <span style="color:${colors[i % colors.length]};">${letter}</span>).join("");
+
+/* ===== Music autoplay on first tap (kept; single handler) ===== */
+const bgMusic = document.getElementById("bgMusic");
+document.body.addEventListener("click", () => {
+  bgMusic.play().catch(()=>{});
+}, { once:true });
+
+/* ===== Word packs (exactly as you had them) ===== */
+const packs = {
+  Food:[
+    ["Pizza","Burger"],["Coffee","Tea"],["Pasta","Noodles"],["Cake","Pie"],
+    ["Ice cream","Frozen yogurt"],["Sandwich","Wrap"],["Sushi","Sashimi"],
+    ["Fried rice","Biryani"],["Curry","Stew"],["Mango","Papaya"],
+    ["Fuchka","Jhalmuri"],["Panta Bhat","Bhuna Khichuri"],["Rosogolla","Chamcham"],["Kacchi Biryani","Morog Polao"],
+    ["Shutki","Hilsa Fish"],["Singara","Chotpoti"],["Mishti Doi","Rasgulla"],["Chicken Curry","Beef Bhuna"],["Vegetable Pulao","Khichuri"],["Bhapa Ilish","Fried Prawn"]
+  ],
+  Places:[
+    ["Library","Bookstore"],["Beach","Mountains"],["Museum","Amusement Park"],["Airport","Train Station"],
+    ["Restaurant","Café"],["Park","Garden"],["Stadium","Arena"],["Desert","Rainforest"],
+    ["Hotel","Resort"],["Village","City"],
+    ["Sundarbans","Cox's Bazar"],["Lalbagh Fort","Ahsan Manzil"],["Sonargaon","Paharpur"],["Kuakata","Jaflong"],["Bandarban","Rangamati"],["Sylhet Tea Gardens","Ratargul Swamp Forest"],["Mahasthangarh","Paharpur ruins"],["Dhaka University","Jagannath University"],["Bagerhat","Shat Gambuj Masjid"],["Rupsha Bridge","Padma Bridge"]
+  ],
+  Objects:[
+    ["Chair","Sofa"],["Bed","Table"],["Lamp","Mirror"],["Laptop","Tablet"],
+    ["Spoon","Fork"],["Backpack","Suitcase"],["Headphones","Earbuds"],["Shelf","Cabinet"],
+    ["Door","Window"],["Curtain","Carpet"]
+  ],
+  Sports:[
+    ["Cricket","Chess"],["Football","Swimming"],["Tennis","Archery"],["Basketball","Gymnastics"],
+    ["Hockey","Boxing"],["Diving","Cycling"],["Cycling","Yoga"],["Boxing","Weightlifting"],
+    ["Table Tennis","Air Hockey"],["Badminton","Fencing"],
+    ["Shakib Al Hasan","Tamim Iqbal"],["Mashrafe Mortaza","Mushfiqur Rahim"],["Litton Das","Mustafizur Rahman"],["Mehedi Hasan Miraz","Mahmudullah"],["Jahanara Alam","Salma Khatun"]
+  ],
+  Celebrities:[
+    ["Dhanush","Vijay"],["Mithun Chakraborty","Ritwick Chakraborty"],["Shakib Khan","Shakib Al Hasan"],
+    ["SRK","Salman Khan"],["Jaya Ahsan","Nusrat Imrose Tisha"],["Deepika Padukone","Kajal Aggarwal"],
+    ["Priyanka Chopra","Thalapathi"],["Leonardo DiCaprio","Chris Hemsworth"],["Scarlett Johansson","Robert Downey Jr."],
+    ["Allu Arjun","NTR"],["Mahesh Babu","Rashmika Mandanna"],["Tiger Shroff","Hrithik Roshan"],["Alia Bhatt","Ranbir Kapoor"],
+    ["Anya Taylor-Joy","Emma Watson"],["Zendaya","Tom Holland"],["Benedict Cumberbatch","Chris Evans"],["Gal Gadot","Henry Cavill"],["Imran Hashmi","Chanchal Choudhuri"],["Pori Moni","Opu Bishwas"]
+  ],
+  Fictional:[
+    ["Harry Potter","Iron Man"],["Hermione Granger","Batman"],["Batman","Gandalf"],["Iron Man","Captain America"],
+    ["Superman","Lex Luthor"],["Spiderman","Green Goblin"],["Frodo Baggins","Naruto"],["Katniss Everdeen","Peeta Mellark"],
+    ["Elsa","Anna"],["Naruto","Sasuke"],["Thor","Loki"],["Hulk","Black Widow"],["Wonder Woman","Aquaman"],["Doctor Strange","Wanda Maximoff"],
+    ["Dumbledore","Voldemort"],["Joker","Harley Quinn"],["Link","Zelda"],["Mario","Luigi"],["Sonic","Tails"]
+  ]
+};
+
+/* ===== Deterministic RNG (seeded, offline, same across devices) ===== */
+function xmur3(str) {
+  let h = 1779033703 ^ str.length;
+  for (let i = 0; i < str.length; i++) {
+    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return function() {
+    h = Math.imul(h ^ (h >>> 16), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    return (h ^= h >>> 16) >>> 0;
+  };
+}
+function mulberry32(a) {
+  return function() {
+    let t = (a += 0x6D2B79F5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function detIndex(key, limit) {
+  const seed = xmur3(key)();
+  const r = mulberry32(seed)();
+  return Math.floor(r * limit);
+}
+
+/* ===== UI refs ===== */
+const packEl = document.getElementById("packSelect");
+const seedEl = document.getElementById("seedInput");
+const totalPlayersEl = document.getElementById("totalPlayers");
+const yourSeatEl = document.getElementById("yourSeat");
+const startBtn = document.getElementById("startGameBtn");
+const replayBtn = document.getElementById("replayBtn");
+const changeSettingsBtn = document.getElementById("changeSettingsBtn");
+
+const lobby = document.getElementById("lobby");
+const playPhase = document.getElementById("playPhase");
+const wordBox = document.getElementById("wordBox");
+const categoryLabel = document.getElementById("categoryLabel");
+
+/* Keep your player list UI (not used for seeded mode) */
+let players=[]; 
+document.getElementById("addPlayerBtn").onclick = () => {
+  const name=document.getElementById("playerName").value.trim();
+  if(name && !players.includes(name)) { 
+    players.push(name);
+    const li=document.createElement("li");
+    li.textContent=name;
+    document.getElementById("playerList").appendChild(li);
+    document.getElementById("playerName").value="";
+  }
+};
+
+/* ===== Game state (seeded) ===== */
+const allCategories = Object.keys(packs); // ["Food","Places",...]
+let state = {
+  seed: "",
+  N: 4,
+  seat: 1,
+  round: 1,
+  lastCategory: null,
+  startPack: "Food"
+};
+
+function sanitize() {
+  const seed = (seedEl.value || "").trim();
+  if (!seed) { alert("Enter a Seed (everyone must use the same)."); throw new Error(); }
+  const N = parseInt(totalPlayersEl.value,10);
+  const seat = parseInt(yourSeatEl.value,10);
+  if (!Number.isInteger(N) || N < 3) { alert("Players (N) must be at least 3."); throw new Error(); }
+  if (!Number.isInteger(seat) || seat < 1 || seat > N) { alert("Your Seat must be between 1 and N."); throw new Error(); }
+  const startPack = packEl.value;
+  return { seed, N, seat, startPack };
+}
+
+/* Choose category for this round:
+   Round 1 = selected pack; Round 2+ = deterministic, different from last */
+function pickCategory(seed, round, startPack, lastCategory) {
+  if (round === 1) return startPack;
+  let idx = detIndex(${seed}|${round}|category, allCategories.length);
+  let cat = allCategories[idx];
+  if (cat === lastCategory) {
+    idx = (idx + 1) % allCategories.length; // ensure different category
+    cat = allCategories[idx];
+  }
+  return cat;
+}
+
+/* Compute pair + imposter seat for a given category & round */
+function computeRound(seed, category, round, N, seat) {
+  const list = packs[category];
+  // deterministic pair choice
+  const pIdx = detIndex(${seed}|${category}|${round}|pair, list.length);
+  const pair = list[pIdx];
+
+  // deterministic imposter seat (1..N)
+  const impSeat = detIndex(${seed}|${category}|${round}|imposter, N) + 1;
+
+  // flip which side is citizens vs imposter for variety
+  const flip = detIndex(${seed}|${category}|${round}|flip, 2) === 1;
+  const citizensWord = flip ? pair[1] : pair[0];
+  const imposterWord = flip ? pair[0] : pair[1];
+
+  const isImposter = seat === impSeat;
+  const myWord = isImposter ? imposterWord : citizensWord;
+
+  return { pair, myWord, isImposter, impSeat };
+}
+
+/* Render the word screen */
+function showWord() {
+  const category = pickCategory(state.seed, state.round, state.startPack, state.lastCategory);
+  const { myWord } = computeRound(state.seed, category, state.round, state.N, state.seat);
+
+  categoryLabel.textContent = Category: ${category};
+  wordBox.textContent = myWord;
+  wordBox.style.transform = 'scale(1.08)';
+
+  state.lastCategory = category;
+}
+
+/* Start & Replay flow */
+startBtn.onclick = () => {
+  try {
+    const cfg = sanitize();
+    state.seed = cfg.seed;
+    state.N = cfg.N;
+    state.seat = cfg.seat;
+    state.startPack = cfg.startPack;
+    state.round = 1;
+    state.lastCategory = null;
+
+    lobby.classList.add("hidden");
+    playPhase.classList.remove("hidden");
+    showWord();
+  } catch { /* handled by alerts */ }
+};
+
+replayBtn.onclick = () => {
+  state.round += 1;
+  showWord();
+};
+
+changeSettingsBtn.onclick = () => {
+  playPhase.classList.add("hidden");
+  lobby.classList.remove("hidden");
+};
+
+/* ===== Minor fix: avoid duplicate bgMusic handlers (already handled once) ===== */
+</script>
+</body>
+</html>
